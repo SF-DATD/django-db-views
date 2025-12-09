@@ -240,6 +240,10 @@ class ViewMigrationAutoDetector(MigrationAutodetector):
                         ),
                         dependencies=dependencies,
                     )
+                    # Also generate AddFieldComment for all fields of that table.
+                    # This ensures field comments are (re)applied whenever the view is (re)created.
+                    for field_name in self.to_state.models[app_label, model_name].fields:
+                        self._generate_added_field(app_label, model_name, field_name)
 
     @staticmethod
     def get_forward_migration_class(model) -> Type[ForwardViewMigrationBase]:
@@ -387,6 +391,16 @@ class ViewMigrationAutoDetector(MigrationAutodetector):
                 )
             )
         # <END of copy paste from MigrationAutodetector>
+
+        # Avoid duplicates: skip if AddFieldComment already scheduled for this field
+        scheduled_ops = self.generated_operations.get(app_label, [])
+        if any(
+            isinstance(op, AddFieldComment)
+            and op.model_name == model_name
+            and op.name == field_name
+            for op in scheduled_ops
+        ):
+            return
 
         self.add_operation(
             app_label,
